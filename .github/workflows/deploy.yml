@@ -1,0 +1,106 @@
+name: Full CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+      
+jobs:
+
+  security_scan:
+    name: Security Scan (CodeQL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@v3
+
+
+  lint_and_validate:
+    name: HTML/CSS/JS Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install HTMLHint
+        run: npm install -g htmlhint
+
+      - name: Lint HTML
+        run: htmlhint .
+
+      - name: Install CSSLint
+        run: npm install -g csslint
+
+      - name: Lint CSS
+        run: csslint .
+
+      - name: Install ESLint
+        run: npm install -g eslint
+
+      - name: Lint JavaScript
+        run: eslint . || true
+
+      - name: Check Broken Links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --verbose --no-progress ./index.html
+
+
+  lighthouse:
+    name: Lighthouse Performance Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Run Lighthouse Audit
+        uses: foo-software/lighthouse-check-action@v9
+        with:
+          urls: https://chiheb-kitar-portfolio.vercel.app/
+          outputDirectory: ./lighthouse-report
+
+      - name: Upload Lighthouse Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: lighthouse-report
+
+
+  deploy:
+    name: Deploy to Vercel (Production)
+    needs: [security_scan, lint_and_validate, lighthouse]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+
+      - name: Notify Success on Discord
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+          -X POST \
+          -d "{\"content\": \"✅ **Deployment Successful**\nCommit: $GITHUB_SHA\nProject: $GITHUB_REPOSITORY\"}" \
+          ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Notify Failure on Discord
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+          -X POST \
+          -d "{\"content\": \"❌ **Deployment FAILED**\nCommit: $GITHUB_SHA\nProject: $GITHUB_REPOSITORY\"}" \
+          ${{ secrets.DISCORD_WEBHOOK }}
