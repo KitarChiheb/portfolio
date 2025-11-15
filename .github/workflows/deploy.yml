@@ -73,12 +73,6 @@ jobs:
             https://chiheb-kitar-portfolio.vercel.app/
           uploadArtifacts: true
 
-      - name: Upload Lighthouse Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: lighthouse-report
-          path: .lighthouseci
-
   deploy:
     name: Deploy to Vercel (Production)
     needs: [security_scan, lint_and_validate, lighthouse]
